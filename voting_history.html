@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Voting History</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:#f7f8fc;margin:0;padding:0}
+header{background:#004aad;color:#fff;padding:14px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+.container{max-width:1000px;background:#fff;margin:20px auto;padding:18px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,.06);}
+input,select,button{padding:8px;margin:6px 0;border:1px solid #d0d6e0;border-radius:6px;font-size:14px;}
+button{background:#004aad;color:#fff;border:none;cursor:pointer;font-weight:bold;transition:0.3s;}
+button:hover{opacity:0.9;}
+button.secondary{background:#666;}
+table{width:100%;border-collapse:collapse;margin-top:12px;}
+th,td{border:1px solid #e6e8ef;padding:8px;text-align:left;}
+th{background:#f0f4ff;}
+.hidden{display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="max-width:1000px;margin:auto; display:flex; justify-content:space-between; align-items:center;">
+    <h2>Voting History</h2>
+    <button id="btnClose" class="secondary">Close</button>
+  </div>
+</header>
+
+<div class="container">
+  <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <label>Filter Voter:</label>
+    <input type="text" id="filterVoter" placeholder="Enter voter name">
+    <label>Filter Candidate:</label>
+    <input type="text" id="filterCandidate" placeholder="Enter candidate name">
+    <button id="btnFilter">Apply Filter</button>
+    <button id="btnReset" class="secondary">Reset Filter</button>
+    <button id="btnExport" style="margin-left:auto;">Export Excel</button>
+  </div>
+
+  <div style="margin-top:12px; overflow-x:auto;">
+    <table id="historyTableData">
+      <thead>
+        <tr>
+          <th>Voter ID</th>
+          <th>Voter Name</th>
+          <th>Post</th>
+          <th>Candidate Name</th>
+        </tr>
+      </thead>
+      <tbody id="historyTableBody">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- XLSX Library -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyA0rIh2HIJ_-gHYMPc6ZdWxw0r1k1reF_w",
+  authDomain: "keo-voting-app.firebaseapp.com",
+  databaseURL: "https://keo-voting-app-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "keo-voting-app",
+  storageBucket: "keo-voting-app.appspot.com",
+  messagingSenderId: "815313144539",
+  appId: "1:815313144539:web:ec9bcf5a0b6dd311551afe"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let votingHistory = [];
+
+// Load voting history from votesLog
+async function loadVotingHistory() {
+  votingHistory = [];
+  const votesLogSnap = await db.ref('votesLog').get();
+  const votesLog = votesLogSnap.val() || {};
+
+  const candidatesSnap = await db.ref('candidates').get();
+  const allCandidates = candidatesSnap.val() || {};
+
+  const votersSnap = await db.ref('voters').get();
+  const allVoters = votersSnap.val() || {};
+
+  for (const voterId in votesLog) {
+    const voterVotes = votesLog[voterId].votes || {};
+    const voterName = allVoters[voterId]?.name || '';
+    for (const post in voterVotes) {
+      const cid = voterVotes[post];
+      const candidateName = allCandidates[post]?.[cid]?.name || cid;
+      votingHistory.push({
+        voterId,
+        voterName,
+        post,
+        candidateName
+      });
+    }
+  }
+
+  renderTable(votingHistory);
+}
+
+function renderTable(data){
+  const tbody = document.getElementById('historyTableBody');
+  if(!data || data.length===0){
+    tbody.innerHTML='<tr><td colspan="4">No voting records</td></tr>';
+    return;
+  }
+  tbody.innerHTML='';
+  data.forEach(row=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${row.voterId}</td><td>${row.voterName}</td><td>${row.post}</td><td>${row.candidateName}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// Filter functionality
+document.getElementById('btnFilter').addEventListener('click',()=>{
+  const voterFilter = document.getElementById('filterVoter').value.toLowerCase();
+  const candidateFilter = document.getElementById('filterCandidate').value.toLowerCase();
+  const filtered = votingHistory.filter(r=>{
+    return (!voterFilter || (r.voterName||'').toLowerCase().includes(voterFilter)) &&
+           (!candidateFilter || (r.candidateName||'').toLowerCase().includes(candidateFilter));
+  });
+  renderTable(filtered);
+});
+
+// Reset filter
+document.getElementById('btnReset').addEventListener('click',()=>{
+  document.getElementById('filterVoter').value='';
+  document.getElementById('filterCandidate').value='';
+  renderTable(votingHistory);
+});
+
+// Export to Excel
+document.getElementById('btnExport').addEventListener('click',()=>{
+  try {
+    const table = document.getElementById('historyTableData');
+    const wb = XLSX.utils.table_to_book(table,{sheet:"Voting History"});
+    const now = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `Voting_History_${now}.xlsx`);
+    alert("Excel exported successfully!");
+  } catch(err) {
+    console.error("Export error:", err);
+    alert("Export failed. Check console for details.");
+  }
+});
+
+// Close button
+document.getElementById('btnClose').addEventListener('click',()=>{
+  window.location.href = "index.html"; // redirect to main portal page
+});
+
+// Load data on page load
+window.onload = loadVotingHistory;
+</script>
+
+</body>
+</html>
