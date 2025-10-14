@@ -12,6 +12,7 @@ input,select,button{padding:8px;margin:6px 0;border:1px solid #d0d6e0;border-rad
 button{background:#004aad;color:#fff;border:none;cursor:pointer;font-weight:bold;transition:0.3s;}
 button:hover{opacity:0.9;}
 button.secondary{background:#666;}
+button.loading{background:#ccc;color:#333;cursor:wait;}
 table{width:100%;border-collapse:collapse;margin-top:12px;}
 th,td{border:1px solid #e6e8ef;padding:8px;text-align:left;}
 th{background:#f0f4ff;}
@@ -35,7 +36,7 @@ th{background:#f0f4ff;}
     <input type="text" id="filterCandidate" placeholder="Enter candidate name">
     <button id="btnFilter">Apply Filter</button>
     <button id="btnReset" class="secondary">Reset Filter</button>
-    <button id="btnExport" style="margin-left:auto;">Export Excel</button>
+    <button id="downloadExcel">📊 Export to Excel</button>
   </div>
 
   <div style="margin-top:12px; overflow-x:auto;">
@@ -55,8 +56,11 @@ th{background:#f0f4ff;}
   </div>
 </div>
 
-<!-- XLSX Library -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+
+<!-- XLSX for Excel export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- ✅ Firebase libraries after -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
@@ -75,7 +79,7 @@ const db = firebase.database();
 
 let votingHistory = [];
 
-// Load voting history from votesLog
+// Load voting history
 async function loadVotingHistory() {
   votingHistory = [];
   const votesLogSnap = await db.ref('votesLog').get();
@@ -93,12 +97,7 @@ async function loadVotingHistory() {
     for (const post in voterVotes) {
       const cid = voterVotes[post];
       const candidateName = allCandidates[post]?.[cid]?.name || cid;
-      votingHistory.push({
-        voterId,
-        voterName,
-        post,
-        candidateName
-      });
+      votingHistory.push({ voterId, voterName, post, candidateName });
     }
   }
 
@@ -137,26 +136,40 @@ document.getElementById('btnReset').addEventListener('click',()=>{
   renderTable(votingHistory);
 });
 
-// Export to Excel
-document.getElementById('btnExport').addEventListener('click',()=>{
-  try {
-    const table = document.getElementById('historyTableData');
-    const wb = XLSX.utils.table_to_book(table,{sheet:"Voting History"});
-    const now = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Voting_History_${now}.xlsx`);
-    alert("Excel exported successfully!");
-  } catch(err) {
-    console.error("Export error:", err);
-    alert("Export failed. Check console for details.");
+// ✅ Export to Excel with professional loading animation
+document.getElementById("downloadExcel").addEventListener("click", async () => {
+  if (typeof XLSX === "undefined") {
+    alert("Export library not loaded. Please wait a moment and try again.");
+    return;
   }
+
+  const btn = document.getElementById("downloadExcel");
+  btn.disabled = true;
+  btn.classList.add("loading");
+  const originalText = btn.textContent;
+  btn.textContent = "⏳ Preparing file...";
+
+  await new Promise(res => setTimeout(res, 800));
+
+  const table = document.getElementById("historyTableData");
+  const workbook = XLSX.utils.table_to_book(table, { sheet: "VotingHistory" });
+  XLSX.writeFile(workbook, "Voting_history.xlsx");
+
+  btn.textContent = "✅ Download ready!";
+  btn.classList.remove("loading");
+
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }, 1500);
 });
 
 // Close button
 document.getElementById('btnClose').addEventListener('click',()=>{
-  window.location.href = "index.html"; // redirect to main portal page
+  window.location.href = "index.html";
 });
 
-// Load data on page load
+// Load data
 window.onload = loadVotingHistory;
 </script>
 
