@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Final Voting Results - KEO</title>
+<style>
+body {
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #f4f7fc;
+  margin: 0;
+  padding: 0;
+}
+header {
+  background: linear-gradient(90deg, #004aad, #0074e4);
+  color: white;
+  text-align: center;
+  padding: 15px 10px;
+  font-size: 22px;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.container {
+  max-width: 950px;
+  margin: 30px auto;
+  background: #fff;
+  padding: 20px 25px;
+  border-radius: 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+h2 {
+  color: #004aad;
+  text-align: center;
+  margin-bottom: 20px;
+}
+h4 {
+  margin-top: 25px;
+  color: #333;
+  border-bottom: 2px solid #e2e6f0;
+  padding-bottom: 6px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+th, td {
+  border: 1px solid #e2e6f0;
+  padding: 8px 10px;
+  text-align: left;
+}
+th {
+  background: #f2f6ff;
+  color: #333;
+}
+tr:nth-child(even) {
+  background: #fafbff;
+}
+button {
+  background: #004aad;
+  color: #fff;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 20px;
+  font-weight: 600;
+}
+button:hover { background: #003c91; }
+.footer {
+  text-align: center;
+  margin-top: 20px;
+}
+.tie-row {
+  background: #fff3cd;
+  color: #8a6d3b;
+  font-weight: bold;
+  text-align: center;
+}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<header>Koothanallur Emirates Organization - Final Results</header>
+
+<div class="container">
+  <h2>Election Final Results</h2>
+  <div id="resultsTables">Loading results...</div>
+  <div class="footer">
+    <button onclick="window.close()">Close Page</button>
+  </div>
+</div>
+
+<script>
+// 🔹 Firebase configuration
+const firebaseConfig = {
+   apiKey: "AIzaSyAGh7y1TFaFG1FJQRPwOhpQL6KwHe8ZYv4",
+  authDomain: "keovoting2.firebaseapp.com",
+  databaseURL: "https://keovoting2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "keovoting2",
+  storageBucket: "keovoting2.firebasestorage.app",
+  messagingSenderId: "1082094262099",
+  appId: "1:1082094262099:web:2ceb5c792b9b86dcf8f3a6",
+  measurementId: "G-40YP07Q2KQ"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// 🔹 Load and show final results
+db.ref('candidates').get().then(snap=>{
+  const candidates = snap.val() || {};
+  let html = '';
+
+  Object.keys(candidates).forEach(post => {
+    html += `<h4>${post}</h4>
+             <table>
+             <tr><th>Position</th><th>Candidate</th><th>Votes</th></tr>`;
+
+    const sortedCandidates = Object.entries(candidates[post])
+      .sort((a,b)=> (b[1].votes||0) - (a[1].votes||0));
+
+    if(sortedCandidates.length === 0){
+      html += `<tr><td colspan="3" class="tie-row">No candidates</td></tr></table>`;
+      return;
+    }
+
+    const maxVotes = sortedCandidates[0][1].votes || 0;
+    const topCandidates = sortedCandidates.filter(c => (c[1].votes||0) === maxVotes);
+
+    // 🟡 Case 1: TIE within category
+    if(topCandidates.length > 1 && maxVotes !== 0){
+      html += `<tr><td colspan="3" class="tie-row">சமநிலை (Tie) - No selection for this post</td></tr>`;
+      topCandidates.forEach(([cid,info])=>{
+        html += `<tr><td>${post}</td><td>${info.name}</td><td>${info.votes||0}</td></tr>`;
+      });
+      html += '</table>';
+      return;
+    }
+
+    // 🟢 Case 2: Normal ranking logic (no tie)
+    if(post.toLowerCase() === 'president'){
+      sortedCandidates.forEach((entry,index)=>{
+        const [cid,info] = entry;
+        let role = 'Not selected';
+        if(index===0) role='President';
+        else if(index===1 || index===2) role='Vice President';
+        html += `<tr><td>${role}</td><td>${info.name}</td><td>${info.votes||0}</td></tr>`;
+      });
+    }
+    else if(post.toLowerCase() === 'secretary'){
+      sortedCandidates.forEach((entry,index)=>{
+        const [cid,info] = entry;
+        let role = 'Not selected';
+        if(index===0) role='Secretary';
+        else if(index===1 || index===2) role='Asst Secretary';
+        html += `<tr><td>${role}</td><td>${info.name}</td><td>${info.votes||0}</td></tr>`;
+      });
+    }
+    else {
+      // Other posts → only first one selected
+      const [cid,info] = sortedCandidates[0];
+      html += `<tr><td>${post}</td><td>${info.name}</td><td>${info.votes||0}</td></tr>`;
+    }
+
+    html += '</table>';
+  });
+
+  document.getElementById('resultsTables').innerHTML = html;
+});
+</script>
+
+</body>
+</html>

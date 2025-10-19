@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Voting History</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:#f7f8fc;margin:0;padding:0}
+header{background:#004aad;color:#fff;padding:14px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+.container{max-width:1000px;background:#fff;margin:20px auto;padding:18px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,.06);}
+input,select,button{padding:8px;margin:6px 0;border:1px solid #d0d6e0;border-radius:6px;font-size:14px;}
+button{background:#004aad;color:#fff;border:none;cursor:pointer;font-weight:bold;transition:0.3s;}
+button:hover{opacity:0.9;}
+button.secondary{background:#666;}
+button.loading{background:#ccc;color:#333;cursor:wait;}
+table{width:100%;border-collapse:collapse;margin-top:12px;}
+th,td{border:1px solid #e6e8ef;padding:8px;text-align:left;}
+th{background:#f0f4ff;}
+.hidden{display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div style="max-width:1000px;margin:auto; display:flex; justify-content:space-between; align-items:center;">
+    <h2>Voting History</h2>
+    <button id="btnClose" class="secondary">Close</button>
+  </div>
+</header>
+
+<div class="container">
+  <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+    <label>Filter Voter:</label>
+    <input type="text" id="filterVoter" placeholder="Enter voter name">
+    <label>Filter Candidate:</label>
+    <input type="text" id="filterCandidate" placeholder="Enter candidate name">
+    <button id="btnFilter">Apply Filter</button>
+    <button id="btnReset" class="secondary">Reset Filter</button>
+    <button id="downloadExcel">📊 Export to Excel</button>
+  </div>
+
+  <div style="margin-top:12px; overflow-x:auto;">
+    <table id="historyTableData">
+      <thead>
+        <tr>
+          <th>Voter ID</th>
+          <th>Voter Name</th>
+          <th>Post</th>
+          <th>Candidate Name</th>
+        </tr>
+      </thead>
+      <tbody id="historyTableBody">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- XLSX for Excel export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Firebase libraries -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAGh7y1TFaFG1FJQRPwOhpQL6KwHe8ZYv4",
+  authDomain: "keovoting2.firebaseapp.com",
+  databaseURL: "https://keovoting2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "keovoting2",
+  storageBucket: "keovoting2.firebasestorage.app",
+  messagingSenderId: "1082094262099",
+  appId: "1:1082094262099:web:2ceb5c792b9b86dcf8f3a6",
+  measurementId: "G-40YP07Q2KQ"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let votingHistory = [];
+
+// ✅ Load voting history with custom candidates included
+async function loadVotingHistory() {
+  votingHistory = [];
+  const [votesLogSnap, candidatesSnap, votersSnap, customSnap] = await Promise.all([
+    db.ref('votesLog').get(),
+    db.ref('candidates').get(),
+    db.ref('voters').get(),
+    db.ref('customCandidates').get()
+  ]);
+
+  const votesLog = votesLogSnap.val() || {};
+  const allCandidates = candidatesSnap.val() || {};
+  const allVoters = votersSnap.val() || {};
+  const customCandidates = customSnap.val() || {};
+
+  for (const voterId in votesLog) {
+    const voterVotes = votesLog[voterId].votes || {};
+    const voterName = allVoters[voterId]?.name || '';
+    for (const post in voterVotes) {
+      const cid = voterVotes[post];
+
+      // 🔹 Try standard candidate first
+      let candidateName = allCandidates[post]?.[cid]?.name;
+
+      // 🔹 If not found, check if it's a custom candidate linked to this voter
+      if (!candidateName && customCandidates[voterId]?.[post]?.[cid]) {
+        candidateName = customCandidates[voterId][post][cid].name;
+      }
+
+      // 🔹 If still not found, assume cid itself is the name (fallback)
+      if (!candidateName) candidateName = cid;
+
+      votingHistory.push({ voterId, voterName, post, candidateName });
+    }
+  }
+
+  renderTable(votingHistory);
+}
+
+function renderTable(data){
+  const tbody = document.getElementById('historyTableBody');
+  if(!data || data.length===0){
+    tbody.innerHTML='<tr><td colspan="4">No voting records</td></tr>';
+    return;
+  }
+  tbody.innerHTML='';
+  data.forEach(row=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${row.voterId}</td><td>${row.voterName}</td><td>${row.post}</td><td>${row.candidateName}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// Filter functionality
+document.getElementById('btnFilter').addEventListener('click',()=>{
+  const voterFilter = document.getElementById('filterVoter').value.toLowerCase();
+  const candidateFilter = document.getElementById('filterCandidate').value.toLowerCase();
+  const filtered = votingHistory.filter(r=>{
+    return (!voterFilter || (r.voterName||'').toLowerCase().includes(voterFilter)) &&
+           (!candidateFilter || (r.candidateName||'').toLowerCase().includes(candidateFilter));
+  });
+  renderTable(filtered);
+});
+
+// Reset filter
+document.getElementById('btnReset').addEventListener('click',()=>{
+  document.getElementById('filterVoter').value='';
+  document.getElementById('filterCandidate').value='';
+  renderTable(votingHistory);
+});
+
+// ✅ Export to Excel
+document.getElementById("downloadExcel").addEventListener("click", async () => {
+  if (typeof XLSX === "undefined") {
+    alert("Export library not loaded. Please wait a moment and try again.");
+    return;
+  }
+  const btn = document.getElementById("downloadExcel");
+  btn.disabled = true;
+  btn.classList.add("loading");
+  const originalText = btn.textContent;
+  btn.textContent = "⏳ Preparing file...";
+
+  await new Promise(res => setTimeout(res, 800));
+
+  const table = document.getElementById("historyTableData");
+  const workbook = XLSX.utils.table_to_book(table, { sheet: "VotingHistory" });
+  XLSX.writeFile(workbook, "Voting_history.xlsx");
+
+  btn.textContent = "✅ Download ready!";
+  btn.classList.remove("loading");
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }, 1500);
+});
+
+// Close button
+document.getElementById('btnClose').addEventListener('click',()=>{
+  window.location.href = "index.html";
+});
+
+// Load data
+window.onload = loadVotingHistory;
+</script>
+
+</body>
+</html>

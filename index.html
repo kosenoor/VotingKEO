@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Voting Portal</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;background:#f7f8fc;margin:0;padding:0}
+header{background:#004aad;color:#fff;padding:14px;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,0.15);}
+.container{max-width:900px;background:#fff;margin:20px auto;padding:18px;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,.06)}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.col{flex:1 1 300px;min-width:260px}
+button{background:#004aad;color:#fff;padding:8px 12px;border:0;border-radius:8px;cursor:pointer;font-weight:bold;transition:0.3s;}
+button:hover{opacity:0.9;}
+button.secondary{background:#666}
+button.small{padding:6px 10px;font-size:13px}
+.hidden{display:none}
+input,select,textarea{width:100%;padding:8px;margin:6px 0;border:1px solid #d0d6e0;border-radius:6px;font-size:14px}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th,td{border:1px solid #e6e8ef;padding:8px;text-align:left}
+th{background:#f0f4ff}
+.badge{display:inline-block;padding:4px 8px;border-radius:6px;background:#eef; color:#003}
+.status-ok{background:#dff7e0;color:#184a12;padding:6px;border-radius:6px}
+.status-bad{background:#ffe6e6;color:#8a1b1b;padding:6px;border-radius:6px}
+.debug{background:#111;color:#fff;padding:8px;border-radius:6px;margin-top:8px;white-space:pre-wrap;font-size:12px}
+.candidate-card{ border:1px solid #d7e0ff; padding:12px 18px; border-radius:12px; cursor:pointer; text-align:center; font-weight:bold; transition:all 0.3s; min-width:120px; background:#f0f4ff; }
+.candidate-card:hover{ transform:scale(1.05); box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+.candidate-selected{ border:3px solid #ff9900; transform:scale(1.05); box-shadow:0 4px 12px rgba(0,0,0,0.2); background:#fff4e6; }
+.add-custom-box{ padding:10px;border-radius:8px;border:1px dashed #d6defa;background:#fbfcff;margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:center; }
+.add-custom-box input{width:auto;flex:1}
+.add-custom-btn{padding:6px 10px;background:#0062d6;border-radius:6px;color:#fff;border:0;cursor:pointer}
+hr{border:none;border-top:1px solid #eee;margin:12px 0}
+h2,h3,h4{margin:10px 0;}
+/* small override for erase buttons (styles kept similar to what you had) */
+.erase-btn{ background-color:#d9534f; color:white; border:none; padding:12px 20px; border-radius:6px; font-size:16px; cursor:pointer; margin:15px; }
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<header>
+  <div style="display:flex;justify-content:space-between;align-items:center;max-width:900px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <img src="logo.png" alt="Logo" style="height:40px;">
+      <strong style="font-size:24px;">Koothanallur Emirates Organization Voting System</strong>
+    </div>
+    <div id="statusIndicator" class="badge">Status: initializing...</div>
+  </div>
+</header>
+
+<div class="container" id="mainContainer">
+  <div id="welcomeBox">
+    <h2 style="text-align:center;">Welcome to Voting Portal</h2>
+    <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;">
+      <button onclick="showVoterLogin()">Voter Login</button>
+      <button onclick="showAdminLogin()">Admin Login</button>
+    </div>
+  </div>
+
+  <div id="loginBox" class="hidden">
+    <h2>Voter Login</h2>
+    <div style="max-width:420px;margin:auto">
+      <label>Voter ID</label>
+      <input id="voterIdInput" placeholder="Enter Voter ID (e.g., V001)">
+      <div style="margin-top:8px;text-align:center">
+        <button onclick="loginVoter()" class="small">Login as Voter</button>
+        <button onclick="backToWelcome()" class="small secondary">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="voteBox" class="hidden">
+    <h2 style="text-align:center">Cast Your Vote</h2>
+    <div><strong>Voter:</strong> <span id="displayVoter"></span></div>
+    <div id="voteFormArea" style="margin-top:12px;"></div>
+    <div style="margin-top:16px; text-align:center;">
+      <button onclick="submitVote()" style="padding:10px 20px; font-size:16px; border-radius:8px; background:#004aad; color:#fff; cursor:pointer;">Submit Vote</button>
+      <button onclick="logoutVoter()" style="padding:10px 20px; font-size:16px; border-radius:8px; background:#666; color:#fff; cursor:pointer; margin-left:10px;">Logout</button>
+    </div>
+  </div>
+
+  <div id="adminLoginBox" class="hidden">
+    <h2>Admin Login</h2>
+    <div style="max-width:420px;margin:auto">
+      <label>Admin Password</label>
+      <input type="password" id="adminPasswordInput" placeholder="Enter password">
+      <div style="margin-top:8px;text-align:center">
+        <button onclick="loginAdmin()" class="small">Login as Admin</button>
+        <button onclick="backToWelcome()" class="small secondary">Back</button>
+      </div>
+      <div style="margin-top:8px;font-size:13px;color:#666;text-align:center">
+        <strong> </strong>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminBox" class="hidden">
+    <h2>Admin Dashboard</h2>
+    <div class="row">
+      <div class="col">
+        <h3>Voters</h3>
+        <label>New Voter ID (optional)</label>
+        <input id="adminNewVoterId" placeholder="V001">
+        <label>New Voter Name</label>
+        <input id="adminNewVoterName" placeholder="Full Name">
+        <button onclick="adminAddVoter()">Add Voter</button>
+        <button onclick="window.open('final_results.html','_blank')" class="small" style="margin-left:8px">Open Final Results</button>
+        <button onclick="window.open('voting_history.html','_blank')" class="small" style="margin-left:8px">Voting History</button>
+        <hr>
+        <button onclick="window.open('not_voted_list.html','_blank')" class="small" style="margin-left:8px">Not Voted List</button>
+        <hr>
+
+
+
+<!-- Import Candidates from Excel -->
+<h4>Import Candidates from Excel</h4>
+<input type="file" id="candidateExcelInput" accept=".xlsx,.xls,.csv">
+<button onclick="importCandidatesExcel()" class="small">Import Candidates</button>
+<div id="candidateImportStatus" style="margin-top:6px;font-size:13px;color:#006;"></div>
+
+<hr>
+
+
+        <!-- admin erase button (unique id) -->
+        <button id="eraseAllBtnAdmin" class="erase-btn"> 🗑️ ERASE ALL DATA </button>
+        <hr>
+        <h4>Import Voters from Excel</h4>
+        <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv">
+        <button onclick="importVotersExcel()" class="small">Import Excel</button>
+        <div id="excelImportStatus" style="margin-top:6px;font-size:13px;color:#006;"></div>
+        <hr>
+        <h4>Bulk Actions</h4>
+        <button onclick="deleteAllVoters()" class="small" style="background:#d9534f;">Delete All Voters</button>
+        <div id="bulkActionStatus" style="margin-top:6px;font-size:13px;color:#d9534f;"></div>
+        <div id="voterListArea">Loading voters...</div>
+      </div>
+
+      <div class="col">
+        <h3>Candidates</h3>
+        <label>Post (e.g., President)</label>
+        <input id="adminCandidatePost" placeholder="Post name">
+        <label>Candidate ID (optional)</label>
+        <input id="adminCandidateId" placeholder="C001">
+        <label>Candidate Name</label>
+        <input id="adminCandidateName" placeholder="Full Name">
+        <button onclick="adminAddCandidate()">Add / Ensure Post</button>
+        <hr>
+        <div id="candidatesArea">Loading candidates...</div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;text-align:center;">
+      <button onclick="adminResetElection()" class="small">Reset Election</button>
+      <button onclick="adminLogout()" class="small secondary">Logout Admin</button>
+      <button onclick="runConnectionTest()" class="small" style="margin-left:8px">DB Test</button>
+    </div>
+  </div>
+
+  <div id="resultsArea" class="hidden" style="margin-top:12px">
+    <h3>Results</h3>
+    <div id="resultsTables"></div>
+  </div>
+
+  <hr>
+  <div id="debugBox" class="debug" style="display:none"></div>
+</div>
+
+<script>
+  // ---------- Firebase config ----------
+  const firebaseConfig = {
+    apiKey: "AIzaSyAGh7y1TFaFG1FJQRPwOhpQL6KwHe8ZYv4",
+    authDomain: "keovoting2.firebaseapp.com",
+    databaseURL: "https://keovoting2-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "keovoting2",
+    storageBucket: "keovoting2.firebasestorage.app",
+    messagingSenderId: "1082094262099",
+    appId: "1:1082094262099:web:2ceb5c792b9b86dcf8f3a6",
+    measurementId: "G-40YP07Q2KQ"
+  };
+  // initialize once
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // ---------- UI elements ----------
+  const statusIndicator = document.getElementById('statusIndicator');
+  const debugBox = document.getElementById('debugBox');
+
+  // ---------- State ----------
+  let currentVoterId = null;
+  let voters = {}, candidates = {};
+  let customCandidatesLocal = {}; // customCandidatesLocal[post] = { localCid: { name, globalId } }
+  let postsSafeMap = {}; // safeName -> real post name (used in vote form for input names)
+
+  // ---------- Debug helper ----------
+  function debug(msg){
+    console.log(msg);
+    debugBox.style.display='block';
+    debugBox.textContent = (new Date()).toLocaleTimeString()+" — "+msg+"\n\n"+debugBox.textContent;
+  }
+
+  // ---------- Connection indicator ----------
+  db.ref('.info/connected').on('value', snap => {
+    const val = snap.val();
+    if (val === true) {
+      statusIndicator.textContent = 'Status: Connected';
+      statusIndicator.className = 'badge status-ok';
+    } else {
+      statusIndicator.textContent = 'Status: Not connected';
+      statusIndicator.className = 'badge status-bad';
+    }
+  });
+
+  // ---------- Navigation ----------
+  function showVoterLogin(){ document.getElementById('welcomeBox').classList.add('hidden'); document.getElementById('loginBox').classList.remove('hidden'); }
+  function showAdminLogin(){ document.getElementById('welcomeBox').classList.add('hidden'); document.getElementById('adminLoginBox').classList.remove('hidden'); }
+  function backToWelcome(){ document.getElementById('loginBox').classList.add('hidden'); document.getElementById('adminLoginBox').classList.add('hidden'); document.getElementById('welcomeBox').classList.remove('hidden'); }
+
+  // ---------- Helpers ----------
+  function safeId(s){ return String(s).replace(/[^a-zA-Z0-9_\-]/g,'_'); }
+  function decodeKey(k){ try { return decodeURIComponent(k); } catch(e){ return k; } }
+  function encodeKey(k){ try { return encodeURIComponent(k); } catch(e){ return k; } }
+
+  // ---------- Voter login ----------
+  function loginVoter(){
+    const id = document.getElementById('voterIdInput').value.trim();
+    if(!id) return alert('Enter Voter ID.');
+    const dbKey = encodeKey(id);
+    db.ref('voters/' + dbKey).get().then(snap=>{
+      if(!snap.exists()) return alert('Voter not found.');
+      const v = snap.val();
+      if(v.hasVoted) return alert('This voter has already voted.');
+      currentVoterId = id;
+      document.getElementById('loginBox').classList.add('hidden');
+      document.getElementById('voteBox').classList.remove('hidden');
+      document.getElementById('displayVoter').textContent = id + ' — ' + (v.name || '');
+      loadCandidates();
+    }).catch(err=>{
+      console.error(err);
+      debug('Error reading voter: '+(err && err.message));
+      alert('Error reading voter. Check console.');
+    });
+  }
+
+  function logoutVoter(){
+    currentVoterId = null;
+    document.getElementById('voteBox').classList.add('hidden');
+    document.getElementById('loginBox').classList.remove('hidden');
+    document.getElementById('voterIdInput').value='';
+    customCandidatesLocal = {};
+    // Clear selection highlights
+    const allCards = document.querySelectorAll('#voteFormArea .candidate-card');
+    allCards.forEach(c=>c.classList.remove('candidate-selected'));
+    document.getElementById('displayVoter').textContent = '';
+  }
+
+  // ---------- Load candidates & custom candidates ----------
+  function loadCandidates(){
+    db.ref('candidates').get().then(snap => {
+      candidates = snap.val() || {};
+      if(!currentVoterId){
+        renderVoteForm();
+        return;
+      }
+      db.ref('customCandidates/' + encodeKey(currentVoterId)).get().then(csnap => {
+        customCandidatesLocal = csnap.val() || {};
+        renderVoteForm();
+      }).catch(err=>{
+        console.error('Failed to load customCandidates:', err);
+        customCandidatesLocal = {};
+        renderVoteForm();
+      });
+    }).catch(err=>{
+      console.error('Failed to load candidates:', err);
+      candidates = {};
+      customCandidatesLocal = {};
+      renderVoteForm();
+    });
+  }
+
+  // ---------- Render vote form ----------
+  function renderVoteForm(){
+    const area = document.getElementById('voteFormArea');
+    area.innerHTML = '';
+
+    // Build set of posts from global and custom
+    const postsSet = new Set();
+    Object.keys(candidates || {}).forEach(p => postsSet.add(p));
+    Object.keys(customCandidatesLocal || {}).forEach(p => postsSet.add(p));
+    const posts = Array.from(postsSet);
+    if(posts.length === 0){
+      area.innerHTML = '<div>No candidates configured.</div>';
+      return;
+    }
+
+    postsSafeMap = {}; // reset mapping
+    posts.forEach(post => {
+      const safe = safeId(post);
+      postsSafeMap[safe] = post;
+
+      const postContainer = document.createElement('div');
+      postContainer.style.width = '100%';
+      postContainer.style.marginBottom = '20px';
+
+      const h = document.createElement('h3');
+      h.textContent = post;
+      h.style.textAlign = 'center';
+      postContainer.appendChild(h);
+
+      const cardsContainer = document.createElement('div');
+      cardsContainer.style.display = 'flex';
+      cardsContainer.style.flexWrap = 'wrap';
+      cardsContainer.style.gap = '12px';
+      cardsContainer.style.justifyContent = 'center';
+
+      // Helper for toggling selection style
+      function clearAndSelect(cardEl){
+        const siblingCards = cardsContainer.querySelectorAll('.candidate-card');
+        siblingCards.forEach(c=>c.classList.remove('candidate-selected'));
+        if(cardEl) cardEl.classList.add('candidate-selected');
+      }
+
+   // Render global candidates for this post (skip own custom candidates)
+const globalList = (candidates[post] && Object.entries(candidates[post])) || [];
+globalList.forEach(([cid, info]) => {
+    const visible = (typeof info.visible === 'undefined') ? true : (info.visible !== false);
+    const isOwnCustom = info && info.sourceVoter && currentVoterId && info.sourceVoter === currentVoterId;
+    if(!visible || isOwnCustom) return; // <-- skip own custom candidate
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = safe;
+    radio.value = 'global::' + cid;
+    radio.id = safe + '__' + cid;
+    radio.style.display = 'none';
+    const card = document.createElement('div');
+    card.className = 'candidate-card';
+    card.textContent = info.name || cid;
+    card.title = (info.votes || 0) + ' votes';
+    card.onclick = function(){
+        const allRadios = document.querySelectorAll(`input[name="${safe}"]`);
+        allRadios.forEach(r=>r.checked=false);
+        radio.checked = true;
+        clearAndSelect(card);
+    };
+    cardsContainer.appendChild(radio);
+    cardsContainer.appendChild(card);
+});
+
+
+
+      // Render this voter's custom candidates for this post (if any)
+      const myCustoms = (customCandidatesLocal[post] && Object.entries(customCandidatesLocal[post])) || [];
+      myCustoms.forEach(([localCid, info])=>{
+        // info expected { name, globalId }
+        const globalId = info.globalId;
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = safe;
+        radio.value = 'global::' + globalId; // use global id for voting
+        radio.id = safe + '__custom__' + localCid;
+        radio.style.display = 'none';
+        const card = document.createElement('div');
+        card.className = 'candidate-card';
+        card.textContent = info.name + ' (Your entry)';
+        card.title = 'Custom candidate you added';
+        card.onclick = function(){
+          const allRadios = document.querySelectorAll('input[name="'+safe+'"]');
+          allRadios.forEach(r=>r.checked=false);
+          radio.checked = true;
+          clearAndSelect(card);
+        };
+        cardsContainer.appendChild(radio);
+        cardsContainer.appendChild(card);
+      });
+
+      postContainer.appendChild(cardsContainer);
+
+      // Add custom candidate UI (only for logged-in voter)
+      if(currentVoterId){
+        const addBox = document.createElement('div');
+        addBox.className = 'add-custom-box';
+        addBox.style.width = '100%';
+        addBox.style.maxWidth = '640px';
+        const input = document.createElement('input');
+        input.placeholder = 'Add a new candidate for ' + post;
+        input.id = 'add_input_' + safe;
+        const btn = document.createElement('button');
+        btn.className = 'add-custom-btn';
+        btn.id = 'add_btn_' + safe;
+        btn.textContent = 'Add';
+        btn.onclick = () => {
+          const name = (input.value || '').trim();
+          if(!name){ alert('Enter candidate name. Blank candidate names are not allowed.'); return; }
+          addCustomCandidate(post, name);
+          input.value = '';
+        };
+        input.addEventListener('keydown', (e) => {
+          if(e.key === 'Enter'){ e.preventDefault(); btn.click(); }
+        });
+        addBox.appendChild(input);
+        addBox.appendChild(btn);
+        postContainer.appendChild(addBox);
+      }
+
+      area.appendChild(postContainer);
+    });
+  }
+
+  // ---------- Add custom candidate ----------
+  function addCustomCandidate(post, name){
+    if(!currentVoterId) return alert('Not logged in.');
+    const trimmedName = String(name || '').trim();
+    if(!trimmedName) return alert('Candidate name cannot be blank.');
+    const localCid = 'c_' + Date.now() + '_' + Math.floor(Math.random()*9999);
+    const globalId = 'CUST_' + Date.now() + '_' + Math.floor(Math.random()*9999);
+    const candidateObj = { name: trimmedName, globalId: globalId };
+    const globalPath = 'candidates/' + encodeKey(post) + '/' + encodeKey(globalId);
+    // Set visible:false so other voters don't see it; store sourceVoter so we can remove it when voter is deleted
+    const globalData = { name: trimmedName, votes: 0, visible: false, sourceVoter: currentVoterId };
+    const customPath = 'customCandidates/' + encodeKey(currentVoterId) + '/' + encodeKey(post) + '/' + encodeKey(localCid);
+    const updates = {};
+    updates[globalPath] = globalData;
+    updates[customPath] = candidateObj;
+    db.ref().update(updates).then(()=>{
+      // Update local caches and re-render
+      if(!customCandidatesLocal[post]) customCandidatesLocal[post] = {};
+      customCandidatesLocal[post][localCid] = candidateObj;
+      if(!candidates[post]) candidates[post] = {};
+      candidates[post][globalId] = globalData;
+      renderVoteForm();
+    }).catch(err=>{
+      console.error('Failed to add custom candidate:', err);
+      alert('Failed to add custom candidate. Check console.');
+    });
+  }
+
+  // ---------- Submit vote ----------
+  function submitVote(){
+    if(!currentVoterId) return alert('Not logged in.');
+    // collect posts via postsSafeMap
+    const selected = {};
+    const safeKeys = Object.keys(postsSafeMap || {});
+    for(const safe of safeKeys){
+      const post = postsSafeMap[safe];
+      const sel = document.querySelector('input[name="'+safe+'"]:checked');
+      if(sel){
+        const v = sel.value;
+        if(typeof v === 'string' && v.startsWith('global::')) selected[post] = v.split('global::')[1];
+        else selected[post] = v;
+      }
+    }
+    // Ensure all posts are selected
+    for(const safe of safeKeys){
+      const post = postsSafeMap[safe];
+      if(!selected[post]) return alert('Select a candidate for: ' + post);
+    }
+    if(!confirm("Are you sure you want to submit your vote?")) return;
+
+    const transactionPromises = [];
+    Object.entries(selected).forEach(([post, globalId]) => {
+      const votesRef = db.ref('candidates/' + encodeKey(post) + '/' + encodeKey(globalId) + '/votes');
+      const p = new Promise((resolve, reject) => {
+        votesRef.transaction(curr => (curr || 0) + 1, (err, committed, snap) => {
+          if(err) reject(err);
+          else resolve({committed, val: snap ? snap.val() : null});
+        });
+      });
+      transactionPromises.push(p);
+    });
+
+    Promise.all(transactionPromises).then(() => {
+      const updates = {};
+      updates['voters/' + encodeKey(currentVoterId) + '/hasVoted'] = true;
+      updates['voters/' + encodeKey(currentVoterId) + '/votes'] = selected;
+      updates['votedVoters/' + encodeKey(currentVoterId)] = true;
+      updates['votesLog/' + encodeKey(currentVoterId)] = { votes: selected, timestamp: Date.now() };
+      return db.ref().update(updates);
+    }).then(() => {
+      alert('Vote recorded successfully.');
+      logoutVoter();
+    }).catch(err => {
+      console.error(err);
+      debug('Vote failed: ' + (err && err.message));
+      alert('Vote failed. Check console.');
+    });
+  }
+
+  // ---------- Admin functions ----------
+  function loginAdmin(){
+    const pwd = document.getElementById('adminPasswordInput').value.trim();
+    if(pwd !== 'admin1199') return alert('Incorrect password.');
+    document.getElementById('adminLoginBox').classList.add('hidden');
+    document.getElementById('adminBox').classList.remove('hidden');
+    document.getElementById('resultsArea').classList.remove('hidden');
+    loadAllData();
+  }
+  function adminLogout(){ document.getElementById('adminBox').classList.add('hidden'); document.getElementById('resultsArea').classList.add('hidden'); backToWelcome(); }
+
+  function loadAllData(){
+    db.ref('voters').get().then(snap => { voters = snap.val() || {}; refreshVoterListUI(); }).catch(err => { console.error('Error loading voters:', err); voters = {}; refreshVoterListUI(); });
+    db.ref('candidates').get().then(snap => { candidates = snap.val() || {}; refreshCandidatesUI(); refreshResultsUI(); }).catch(err => { console.error('Error loading candidates:', err); candidates = {}; refreshCandidatesUI(); refreshResultsUI(); });
+  }
+
+  // ---------- Admin UI refresh ----------
+  function refreshVoterListUI(){
+    const area = document.getElementById('voterListArea');
+    if(!area) return;
+    const keys = Object.keys(voters || {}).sort();
+    if(keys.length === 0){
+      area.innerHTML = '<div>No voters configured</div>';
+      return;
+    }
+    let html = '<table><tr><th>ID</th><th>Name</th><th>Voted</th><th>Action</th></tr>';
+    keys.forEach(key => {
+      const decodedId = decodeKey(key);
+      const v = voters[key] || {};
+      const deleteBtn = `<button class="small" onclick="adminDeleteVoter('${key.replace(/'/g,"\\'")}')">Delete</button>`;
+      const clearVoteBtn = v.hasVoted ? `<button class="small secondary" onclick="adminDeleteVoterVote('${key.replace(/'/g,"\\'")}')">Delete Vote</button>` : '';
+      html += `<tr>
+        <td>${decodedId}</td>
+        <td>${v.name || ''}</td>
+        <td>${v.hasVoted ? 'Yes' : 'No'}</td>
+        <td>${deleteBtn} ${clearVoteBtn}</td>
+      </tr>`;
+    });
+    html += '</table>';
+    area.innerHTML = html;
+  }
+
+  function refreshCandidatesUI(){
+    const area = document.getElementById('candidatesArea');
+    if(!area) return;
+    const posts = Object.keys(candidates || {}).sort();
+    if(posts.length === 0){
+      area.innerHTML = '<div>No candidates configured</div>';
+      return;
+    }
+    let html = '';
+    posts.forEach(post => {
+      html += `<h4>${post}</h4><ul>`;
+      Object.entries(candidates[post]).forEach(([cid, info]) => {
+        const vis = (typeof info.visible === 'undefined') ? 'Yes' : (info.visible !== false ? 'Yes' : 'Hidden');
+        html += `<li>${cid} — ${info.name} (Votes: ${info.votes || 0}) [Visible: ${vis}] <button class="small" onclick="adminDeleteCandidate('${encodeKey(post)}','${encodeKey(cid)}')">Delete</button></li>`;
+      });
+      html += `</ul>`;
+    });
+    area.innerHTML = html;
+  }
+
+  function refreshResultsUI(){
+    const area = document.getElementById('resultsTables');
+    if(!area) return;
+    let html = '';
+    Object.keys(candidates || {}).forEach(post => {
+      html += `<h4>${post}</h4><table><tr><th>Candidate</th><th>Votes</th></tr>`;
+      Object.entries(candidates[post]).forEach(([cid, info])=>{
+        html += `<tr><td>${info.name}</td><td>${info.votes || 0}</td></tr>`;
+      });
+      html += `</table>`;
+    });
+    area.innerHTML = html;
+  }
+
+  // ---------- Admin actions ----------
+
+  function adminDeleteCandidate(postEncoded, cidEncoded){
+    if(!confirm('Delete this candidate?')) return;
+    db.ref('candidates/' + postEncoded + '/' + cidEncoded).remove().then(()=>{
+      alert('Candidate deleted.');
+      loadAllData();
+    }).catch(err=>{
+      console.error(err);
+      alert('Failed to delete candidate. Check console.');
+    });
+  }
+
+  function adminAddVoter(){
+    const idVal = document.getElementById('adminNewVoterId').value.trim();
+    const name = document.getElementById('adminNewVoterName').value.trim();
+    if(!idVal || !name) return alert('Enter voter ID and name.');
+    const dbKey = encodeKey(idVal);
+    db.ref('voters/' + dbKey).set({ name: name, hasVoted: false }).then(()=>{
+      alert('Voter added.');
+      document.getElementById('adminNewVoterId').value='';
+      document.getElementById('adminNewVoterName').value='';
+      loadAllData();
+    }).catch(err=>{
+      console.error(err);
+      alert('Failed to add voter. Check console.');
+    });
+  }
+
+  // When deleting a voter, also delete their customCandidates node AND any global candidate entries created by them (sourceVoter === voterId)
+  function adminDeleteVoter(dbKey){
+    if(!confirm('Delete this voter?')) return;
+    const voterId = decodeKey(dbKey);
+    // Prepare updates to remove voter and related data
+    const updates = {};
+    updates['voters/' + dbKey] = null;
+    updates['customCandidates/' + dbKey] = null;
+    // Find any candidates created by this voter and delete them
+    db.ref('candidates').get().then(snap=>{
+      const allCandidates = snap.val() || {};
+      Object.keys(allCandidates).forEach(post => {
+        Object.entries(allCandidates[post]).forEach(([cid, info])=>{
+          if(info && info.sourceVoter && info.sourceVoter === voterId){
+            updates['candidates/' + encodeKey(post) + '/' + encodeKey(cid)] = null;
+          }
+        });
+      });
+      // Also remove votesLog and votedVoters entries for this voter (if any)
+      updates['votesLog/' + dbKey] = null;
+      updates['votedVoters/' + dbKey] = null;
+
+      // Apply update
+      db.ref().update(updates).then(()=>{
+        alert('Voter and related custom candidates deleted.');
+        loadAllData();
+      }).catch(err=>{
+        console.error('Failed to delete voter and related items:', err);
+        alert('Failed to delete voter. Check console.');
+      });
+    }).catch(err=>{
+      console.error('Failed to inspect candidates while deleting voter:', err);
+      // fallback: still remove voter and customCandidates
+      db.ref().update({ ['voters/' + dbKey]: null, ['customCandidates/' + dbKey]: null }).then(()=>{
+        alert('Voter deleted (could not purge created candidates due to read error).');
+        loadAllData();
+      }).catch(e=>{
+        console.error(e);
+        alert('Failed to delete voter. Check console.');
+      });
+    });
+  }
+
+  function adminDeleteVoterVote(dbKey){
+    if(!confirm('Delete vote and mark voter as not voted?')) return;
+    const updates = {};
+    updates['voters/' + dbKey + '/hasVoted'] = false;
+    updates['votesLog/' + dbKey] = null;
+    updates['votedVoters/' + dbKey] = null;
+    db.ref().update(updates).then(()=>{
+      alert('Vote cleared.');
+      loadAllData();
+    }).catch(err=>{
+      console.error(err);
+      alert('Failed to clear voter vote. Check console.');
+    });
+  }
+
+  function adminAddCandidate(){
+    const post = document.getElementById('adminCandidatePost').value.trim();
+    let cid = document.getElementById('adminCandidateId').value.trim();
+    const name = document.getElementById('adminCandidateName').value.trim();
+    if(!post || !name) return alert('Enter post and candidate name.');
+    if(!cid) cid = 'C' + Math.floor(Math.random()*9999);
+    db.ref('candidates/' + encodeKey(post) + '/' + encodeKey(cid)).set({ name: name, votes: 0 }).then(()=>{
+      alert('Candidate added.');
+      document.getElementById('adminCandidatePost').value='';
+      document.getElementById('adminCandidateId').value='';
+      document.getElementById('adminCandidateName').value='';
+      loadAllData();
+    }).catch(err=>{
+      console.error(err);
+      alert('Failed to add candidate. Check console.');
+    });
+  }
+
+  function adminResetElection(){
+    if(!confirm('Reset all votes, voter statuses, and vote history?')) return;
+    const updates = {};
+    Object.keys(voters || {}).forEach(key => {
+      updates['voters/' + key + '/hasVoted'] = false;
+    });
+    Object.keys(candidates || {}).forEach(post => {
+      Object.keys(candidates[post]).forEach(cid => {
+        updates['candidates/' + encodeKey(post) + '/' + encodeKey(cid) + '/votes'] = 0;
+      });
+    });
+    updates['votesLog'] = null;
+    updates['votedVoters'] = null;
+    db.ref().update(updates).then(()=>{
+      alert('Election and vote history reset successfully.');
+      loadAllData();
+    }).catch(err=>{
+      console.error(err);
+      alert('Reset failed. Check console.');
+    });
+  }
+
+  // ---------- Excel import ----------
+  function importVotersExcel() {
+    const fileInput = document.getElementById('excelFileInput');
+    const statusDiv = document.getElementById('excelImportStatus');
+    if (!fileInput.files || fileInput.files.length === 0) {
+      alert('Select an Excel file first.');
+      return;
+    }
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: ["voterId", "name"], defval: "" });
+        if (jsonData.length === 0) {
+          alert('Excel file is empty or invalid.');
+          return;
+        }
+        let addedCount = 0;
+        const promises = [];
+        jsonData.forEach((row) => {
+          const id = row.voterId ? String(row.voterId).trim() : "";
+          const name = row.name ? String(row.name).trim() : "";
+          if (id && name) {
+            const ref = db.ref('voters/' + encodeKey(id));
+            const p = ref.set({ name: name, hasVoted: false })
+              .then(()=> { addedCount++; })
+              .catch(err => console.error('Error adding voter:', id, err));
+            promises.push(p);
+          }
+        });
+        Promise.all(promises).then(() => {
+          statusDiv.textContent = `Imported ${addedCount} voters successfully.`;
+          loadAllData();
+          fileInput.value = '';
+        }).catch(err => {
+          console.error(err);
+          alert('Error importing voters. Check console.');
+        });
+      } catch(err) {
+        console.error('Import error:', err);
+        alert('Failed to read Excel file. Check console.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // ---------- Delete all voters ----------
+  function deleteAllVoters() {
+    const statusDiv = document.getElementById('bulkActionStatus');
+    if(!confirm("Are you sure you want to DELETE ALL VOTERS? This action cannot be undone.")) return;
+    db.ref('voters').remove()
+      .then(() => {
+        statusDiv.textContent = 'All voters deleted successfully.';
+        voters = {};
+        refreshVoterListUI();
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Failed to delete voters. Check console.');
+      });
+    if(confirm("Also clear voting history (votesLog & votedVoters)?")) {
+      const updates = { 'votesLog': null, 'votedVoters': null };
+      db.ref().update(updates)
+        .then(()=> console.log('Voting history cleared.'))
+        .catch(err=> console.error('Failed to clear voting history:', err));
+    }
+  }
+
+  // ---------- Connection test ----------
+  function runConnectionTest(){ db.ref('.info/connected').get().then(snap=>alert('Connection test: '+(snap.val()===true?'Connected':'Not connected'))); }
+
+  // ---------- Final results view (renders into resultsTables) ----------
+  function showFinalResults() {
+    if(!candidates || Object.keys(candidates).length === 0) return alert("No candidates available.");
+    let html = '<h3>Final Results</h3>';
+    Object.keys(candidates).forEach(post => {
+      html += `<h4>${post}</h4><table><tr><th>Post</th><th>Candidate</th><th>Votes</th></tr>`;
+      const sortedCandidates = Object.entries(candidates[post]).sort((a,b)=> (b[1].votes||0) - (a[1].votes||0));
+      if(post.toLowerCase() === 'president'){
+        sortedCandidates.forEach((entry,index)=>{
+          const [cid, info] = entry;
+          let role = 'Not selected';
+          if(index===0) role = 'President';
+          else if(index===1 || index===2) role = 'Vice President';
+          html += `<tr><td>${role}</td><td>${info.name}</td><td>${info.votes||0}</td></tr>`;
+        });
+      } else if(post.toLowerCase() === 'secretary'){
+        sortedCandidates.forEach((entry,index)=>{
+          const [cid, info] = entry;
+          let role = 'Not selected';
+          if(index===0) role = 'Secretary';
+          else if(index===1 || index===2) role = 'Asst Secretary';
+          html += `<tr><td>${role}</td><td>${info.name}</td><td>${info.votes||0}</td></tr>`;
+        });
+      } else {
+        if(sortedCandidates.length>0){
+          const [cid, info] = sortedCandidates[0];
+          html += `<tr><td>${post}</td><td>${info.name}</td><td>${info.votes||0}</td></tr>`;
+        } else {
+          html += `<tr><td>${post}</td><td>Not selected</td><td>0</td></tr>`;
+        }
+      }
+      html += '</table>';
+    });
+    const area = document.getElementById('resultsTables');
+    area.innerHTML = html;
+  }
+
+  // ---------- Initial load for admin candidate/voter lists (if admin opens) ----------
+  loadAllData();
+
+  // ---------- ERASE ALL DATA (wired to both header and admin erase buttons) ----------
+  // (this function removes all main relevant nodes so erase is complete)
+  async function eraseAllDataConfirmed(){
+    const confirmDelete = confirm("⚠️ Are you sure you want to ERASE ALL DATA? This will delete all voters, candidates, votes, and custom candidates permanently!");
+    if (!confirmDelete) return;
+    try {
+      const pathsToDelete = ["voters", "candidates", "customCandidates", "votes", "votedVoters", "votesLog"];
+      for (const path of pathsToDelete) {
+        await db.ref(path).remove();
+        console.log(`Deleted: ${path}`);
+      }
+      alert("✅ All data (voters, candidates, votes, custom candidates) has been successfully erased.");
+      loadAllData();
+    } catch (error) {
+      console.error("Error erasing data:", error);
+      alert("❌ Failed to erase data. Check console or Firebase permissions.");
+    }
+  }
+
+  // wire admin erase button
+  document.getElementById("eraseAllBtnAdmin").addEventListener("click", eraseAllDataConfirmed);
+ // If you still want a header-level erase button visible in the page,
+  // create it dynamically (keeps markup intact but avoids duplicate IDs).
+  (function createHeaderEraseButton(){
+ //   const headerContainer = document.querySelector('header > div');
+    if(!headerContainer) return;
+  //  const btn = document.createElement('button');
+    btn.className = 'erase-btn';
+  //  btn.style.marginLeft = '12px';
+  //  btn.textContent = '🗑️ ERASE ALL DATA';
+    btn.title = 'Erase everything';
+    btn.addEventListener('click', eraseAllDataConfirmed);
+    // append to header container (keeps UI similar to original)
+    headerContainer.appendChild(btn);
+  })();
+</script>
+
+
+
+<script>
+function importCandidatesExcel() {
+    const fileInput = document.getElementById('candidateExcelInput');
+    const statusDiv = document.getElementById('candidateImportStatus');
+    if (!fileInput.files || fileInput.files.length === 0) {
+        alert('Select an Excel file first.');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+
+            // Expecting columns: post, candidateId (optional), name
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: ["post","candidateId","name"], defval: "" });
+            if (jsonData.length === 0) {
+                alert('Excel file is empty or invalid.');
+                return;
+            }
+
+            let addedCount = 0;
+            const promises = [];
+
+            jsonData.forEach((row) => {
+                const post = row.post ? String(row.post).trim() : "";
+                let cid = row.candidateId ? String(row.candidateId).trim() : "";
+                const name = row.name ? String(row.name).trim() : "";
+
+                if (post && name) {
+                    if(!cid) cid = 'C' + Date.now() + '_' + Math.floor(Math.random()*9999);
+                    const ref = db.ref('candidates/' + encodeKey(post) + '/' + encodeKey(cid));
+                    const p = ref.set({ name: name, votes: 0 }).then(() => {
+                        addedCount++;
+                    }).catch(err => console.error('Error adding candidate:', name, err));
+                    promises.push(p);
+                }
+            });
+
+            Promise.all(promises).then(() => {
+                statusDiv.textContent = `Imported ${addedCount} candidates successfully.`;
+                fileInput.value = '';
+            }).catch(err => {
+                console.error(err);
+                alert('Error importing candidates. Check console.');
+            });
+
+        } catch(err) {
+            console.error('Import error:', err);
+            alert('Failed to read Excel file. Check console.');
+        }
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+
+
+
+
+
+ 
+</script>
+</body>
+</html>

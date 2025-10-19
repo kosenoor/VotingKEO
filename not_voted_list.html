@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Voters Not Voted Yet</title>
+<style>
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f7f8fc;
+  margin: 0;
+  padding: 0;
+}
+header {
+  background: #004aad;
+  color: #fff;
+  padding: 14px;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.container {
+  max-width: 900px;
+  background: #fff;
+  margin: 20px auto;
+  padding: 18px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,.06);
+}
+h2 {
+  text-align: center;
+  color: #004aad;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+th, td {
+  border: 1px solid #e6e8ef;
+  padding: 8px;
+  text-align: left;
+}
+th {
+  background: #f0f4ff;
+}
+button {
+  background: #004aad;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+button:hover {
+  opacity: 0.9;
+}
+</style>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+
+<body>
+<header>
+  <h2>Voters Who Have Not Yet Voted</h2>
+</header>
+
+<div class="container">
+  <div style="text-align:center; margin-bottom:10px;">
+    <button onclick="loadNotVoted()">🔄 Refresh List</button>
+    <button onclick="exportNotVoted()">⬇ Export to CSV</button>
+  </div>
+  <div id="notVotedList">Loading...</div>
+</div>
+
+<script>
+// Firebase Config (same as your main file)
+const firebaseConfig = {
+  apiKey: "AIzaSyAGh7y1TFaFG1FJQRPwOhpQL6KwHe8ZYv4",
+  authDomain: "keovoting2.firebaseapp.com",
+  databaseURL: "https://keovoting2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "keovoting2",
+  storageBucket: "keovoting2.firebasestorage.app",
+  messagingSenderId: "1082094262099",
+  appId: "1:1082094262099:web:2ceb5c792b9b86dcf8f3a6",
+  measurementId: "G-40YP07Q2KQ"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+function loadNotVoted() {
+  const listDiv = document.getElementById("notVotedList");
+  listDiv.innerHTML = "Loading...";
+
+  db.ref("voters").get().then(snap => {
+    if (!snap.exists()) {
+      listDiv.innerHTML = "<div>No voters found.</div>";
+      return;
+    }
+
+    const voters = snap.val();
+    const notVoted = Object.entries(voters)
+      .filter(([id, v]) => !v.hasVoted)
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    if (notVoted.length === 0) {
+      listDiv.innerHTML = "<div style='color:green;font-weight:bold;text-align:center;'>All voters have voted 🎉</div>";
+      return;
+    }
+
+    let html = `<table><tr><th>#</th><th>Voter ID</th><th>Name</th></tr>`;
+    notVoted.forEach(([id, info], i) => {
+      html += `<tr><td>${i + 1}</td><td>${id}</td><td>${info.name || ''}</td></tr>`;
+    });
+    html += "</table>";
+    listDiv.innerHTML = html;
+  }).catch(err => {
+    console.error(err);
+    listDiv.innerHTML = "<div style='color:red;'>Error loading data.</div>";
+  });
+}
+
+function exportNotVoted() {
+  db.ref("voters").get().then(snap => {
+    if (!snap.exists()) return alert("No voters found.");
+
+    const voters = snap.val();
+    const notVoted = Object.entries(voters)
+      .filter(([id, v]) => !v.hasVoted)
+      .map(([id, v]) => ({ VoterID: id, Name: v.name || "" }));
+
+    if (notVoted.length === 0) return alert("All voters have voted.");
+
+    let csv = "VoterID,Name\n";
+    notVoted.forEach(v => {
+      csv += `${v.VoterID},${v.Name}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "not_voted_list.csv";
+    link.click();
+  });
+}
+
+loadNotVoted();
+</script>
+</body>
+</html>
